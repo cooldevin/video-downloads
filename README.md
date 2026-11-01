@@ -18,6 +18,10 @@
   - 支持 YouTube 播放列表（Playlist）自动展开为独立子任务。
   - 队列并发控制：可自定义 1~10 线程并发下载。
 
+- 🔢 **智能序号编排与媒体库索引**：
+  - 下载文件自动添加规范序号前缀（如 `001. 视频标题 [id].mp4`）。
+  - 内置已下载媒体库扫描与智能续编，新下载任务无缝衔接序号，支持一键标准化规整已有文件。
+
 - 🔌 **开箱即用，免手动配置 FFmpeg**：
   - 自动集成独立 FFmpeg 二进制，全自动进行音视频流合并（Muxing）与转码封装。
 
@@ -43,6 +47,6 @@ python run.py
 
 ## 🛠️ 技术栈
 
-- **后端**：Python 3.14 + FastAPI + Uvicorn + yt-dlp + imageio-ffmpeg (FFmpeg v7.1)
-- **前端**：Vue 3 + Tailwind CSS + Lucide Icons + Bklit UI Design System
+- **后端**：Python + FastAPI + Uvicorn + yt-dlp + imageio-ffmpeg (FFmpeg v7.1)
+- **前端**：原生 Vanilla JS + 本地化 Tailwind CSS + Lucide Icons + Bklit UI Design System (零外网依赖，极速秒开)
 - **通讯**：REST API + Server-Sent Events (SSE 实时推流)
