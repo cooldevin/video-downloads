@@ -1,0 +1,10 @@
+{
+  "download_dir": "E:\\dev-space\\code\\video-downloads\\downloads",
+  "proxy": "",
+  "max_concurrent": 3,
+  "default_quality": "best",
+  "default_format": "mp4",
+  "download_subtitles": false,
+  "embed_thumbnail": true,
+  "cookies_file": ""
+}

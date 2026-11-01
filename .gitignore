@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+venv/
+.venv/
+
+# Downloaded media files (do not commit downloaded videos/audios)
+downloads/*
+!downloads/.gitkeep
+
+# Local user configs / cookies
+cookies.txt
+*.log
+
+# IDE
+.vscode/
+.idea/
