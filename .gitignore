@@ -10,10 +10,17 @@ venv/
 downloads/*
 !downloads/.gitkeep
 
-# Local user configs / cookies
+# Sensitive authentication & profile data (NEVER commit to git/github)
 cookies.txt
+data/
+.browser_profile/
 *.log
 
-# IDE
+# Local user configs
+config.json
+
+# IDE & OS
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
