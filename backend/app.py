@@ -12,9 +12,9 @@ from pydantic import BaseModel
 
 from backend.config import config, save_config, AppConfig, BASE_DIR
 from backend.downloader import download_manager, scan_downloaded_files
-from backend.utils import open_in_explorer, test_proxy_connection, format_bytes
+from backend.utils import open_in_explorer, format_bytes
 
-app = FastAPI(title="Bklit YouTube Downloader API")
+app = FastAPI(title="YouTube Downloader API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,25 +35,23 @@ class DownloadRequest(BaseModel):
     custom_dir: Optional[str] = None
     expand_playlists: Optional[bool] = True
     start_index: Optional[int] = None
+    cookies_from_browser: Optional[str] = None
 
 
 class ParseRequest(BaseModel):
     urls: List[str]
     start_index: Optional[int] = None
+    cookies_from_browser: Optional[str] = None
 
 
 class ConfigUpdateRequest(BaseModel):
     download_dir: Optional[str] = None
-    proxy: Optional[str] = None
     max_concurrent: Optional[int] = None
     default_quality: Optional[str] = None
     default_format: Optional[str] = None
     download_subtitles: Optional[bool] = None
     cookies_file: Optional[str] = None
-
-
-class TestProxyRequest(BaseModel):
-    proxy: Optional[str] = ""
+    cookies_from_browser: Optional[str] = None
 
 
 class OpenFileRequest(BaseModel):
@@ -94,7 +92,6 @@ def renumber_library():
         raise HTTPException(status_code=404, detail="下载目录不存在")
     
     files = [f for f in p.iterdir() if f.is_file() and f.suffix.lower() in [".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".wav"]]
-    # Sort files by creation time
     files.sort(key=lambda f: f.stat().st_mtime)
     
     renamed = 0
@@ -114,6 +111,7 @@ def renumber_library():
 async def start_downloads(req: DownloadRequest):
     created_tasks = []
     current_index = req.start_index if (req.start_index and req.start_index > 0) else download_manager.get_next_index(req.custom_dir)
+    browser = req.cookies_from_browser if req.cookies_from_browser is not None else config.cookies_from_browser
 
     # 1. If explicit pre-parsed items are passed (from preview modal)
     if req.items and len(req.items) > 0:
@@ -127,7 +125,8 @@ async def start_downloads(req: DownloadRequest):
                 index=idx,
                 quality=req.quality,
                 container_format=req.format,
-                custom_dir=req.custom_dir
+                custom_dir=req.custom_dir,
+                cookies_from_browser=browser
             )
             t.title = item.get("title", t.title)
             t.thumbnail = item.get("thumbnail", "")
@@ -147,8 +146,7 @@ async def start_downloads(req: DownloadRequest):
     for url in cleaned_urls:
         if req.expand_playlists and ("list=" in url or "/playlist" in url):
             try:
-                # Async background expansion or fast flat parse
-                parsed_items = await asyncio.to_thread(download_manager.parse_urls, [url], current_index)
+                parsed_items = await asyncio.to_thread(download_manager.parse_urls, [url], current_index, browser)
                 if parsed_items and len(parsed_items) > 1:
                     for item in parsed_items:
                         if not item.get("error"):
@@ -157,7 +155,8 @@ async def start_downloads(req: DownloadRequest):
                                 index=item.get("index") or current_index,
                                 quality=req.quality,
                                 container_format=req.format,
-                                custom_dir=req.custom_dir
+                                custom_dir=req.custom_dir,
+                                cookies_from_browser=browser
                             )
                             t.title = item.get("title", t.title)
                             t.thumbnail = item.get("thumbnail", "")
@@ -176,7 +175,8 @@ async def start_downloads(req: DownloadRequest):
             index=current_index,
             quality=req.quality,
             container_format=req.format,
-            custom_dir=req.custom_dir
+            custom_dir=req.custom_dir,
+            cookies_from_browser=browser
         )
         created_tasks.append(t.to_dict())
         current_index += 1
@@ -191,7 +191,7 @@ async def parse_urls(req: ParseRequest):
         raise HTTPException(status_code=400, detail="链接列表为空")
     
     start_index = req.start_index if (req.start_index and req.start_index > 0) else download_manager.get_next_index()
-    results = await asyncio.to_thread(download_manager.parse_urls, cleaned_urls, start_index)
+    results = await asyncio.to_thread(download_manager.parse_urls, cleaned_urls, start_index, req.cookies_from_browser)
     return {"items": results, "start_index": start_index}
 
 
@@ -273,8 +273,6 @@ def get_config():
 def update_config(req: ConfigUpdateRequest):
     if req.download_dir is not None:
         config.download_dir = req.download_dir
-    if req.proxy is not None:
-        config.proxy = req.proxy.strip()
     if req.max_concurrent is not None:
         config.max_concurrent = max(1, min(10, req.max_concurrent))
     if req.default_quality is not None:
@@ -285,16 +283,11 @@ def update_config(req: ConfigUpdateRequest):
         config.download_subtitles = req.download_subtitles
     if req.cookies_file is not None:
         config.cookies_file = req.cookies_file.strip()
+    if req.cookies_from_browser is not None:
+        config.cookies_from_browser = req.cookies_from_browser.strip()
 
     save_config(config)
     return {"message": "配置已保存", "config": config.model_dump()}
-
-
-@app.post("/api/test-proxy")
-async def test_proxy(req: TestProxyRequest):
-    proxy_val = req.proxy if req.proxy is not None else config.proxy
-    success, msg = await asyncio.to_thread(test_proxy_connection, proxy_val)
-    return {"success": success, "message": msg}
 
 
 @app.get("/api/events")

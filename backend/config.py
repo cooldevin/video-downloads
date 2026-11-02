@@ -11,13 +11,13 @@ DEFAULT_DOWNLOAD_DIR = BASE_DIR / "downloads"
 
 class AppConfig(BaseModel):
     download_dir: str = str(DEFAULT_DOWNLOAD_DIR)
-    proxy: str = ""  # e.g., "http://127.0.0.1:7890" or empty
     max_concurrent: int = 3
     default_quality: str = "best"  # "best", "1080p", "720p", "480p", "audio"
     default_format: str = "mp4"    # "mp4", "mkv", "mp3", "m4a"
     download_subtitles: bool = False
     embed_thumbnail: bool = True
     cookies_file: str = ""
+    cookies_from_browser: str = ""  # "chrome", "edge", "firefox", "brave", etc.
 
     @property
     def ffmpeg_location(self) -> str:

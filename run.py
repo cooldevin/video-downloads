@@ -28,7 +28,7 @@ def find_available_port(host: str, default_port: int = 8000) -> int:
 
 def open_browser_delayed(url: str, delay: float = 1.0):
     time.sleep(delay)
-    print(f"\n[Bklit Downloader] 正在打开浏览器: {url}")
+    print(f"\n正在打开浏览器: {url}")
     webbrowser.open(url)
 
 if __name__ == "__main__":
@@ -37,14 +37,9 @@ if __name__ == "__main__":
     url = f"http://{host}:{port}"
 
     print("=" * 60)
-    print("  YouTube 批量视频下载工具 - Bklit UI 版")
+    print("  YouTube 视频下载工具")
     print(f"  服务地址: {url}")
     print(f"  保存目录: {config.download_dir}")
-    print(f"  FFmpeg 路径: {config.ffmpeg_location}")
-    if config.proxy:
-        print(f"  代理设置: {config.proxy}")
-    else:
-        print("  代理设置: 直连 (如需下载 YouTube 请在界面设置中配置代理)")
     print("=" * 60)
 
     # Launch browser automatically

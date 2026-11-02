@@ -57,13 +57,14 @@ def scan_downloaded_files(download_dir: str) -> List[Dict[str, Any]]:
 
 
 class DownloadTask:
-    def __init__(self, url: str, index: int = 1, quality: str = "best", container_format: str = "mp4", custom_dir: Optional[str] = None):
+    def __init__(self, url: str, index: int = 1, quality: str = "best", container_format: str = "mp4", custom_dir: Optional[str] = None, cookies_from_browser: Optional[str] = None):
         self.id = str(uuid.uuid4())[:8]
         self.url = url
         self.index = index
         self.quality = quality
         self.format = container_format
         self.download_dir = custom_dir or config.download_dir
+        self.cookies_from_browser = cookies_from_browser or config.cookies_from_browser
         
         self.title = "正在解析视频信息..."
         self.uploader = ""
@@ -119,6 +120,7 @@ class DownloadTask:
             "error_message": self.error_message,
             "created_at": self.created_at,
             "download_dir": self.download_dir,
+            "cookies_from_browser": self.cookies_from_browser,
         }
 
 
@@ -159,15 +161,16 @@ class DownloadManager:
         all_indices = existing_task_indices + [folder_max] + [0]
         return max(all_indices) + 1
 
-    def add_task(self, url: str, index: Optional[int] = None, quality: Optional[str] = None, container_format: Optional[str] = None, custom_dir: Optional[str] = None) -> DownloadTask:
+    def add_task(self, url: str, index: Optional[int] = None, quality: Optional[str] = None, container_format: Optional[str] = None, custom_dir: Optional[str] = None, cookies_from_browser: Optional[str] = None) -> DownloadTask:
         quality = quality or config.default_quality
         container_format = container_format or config.default_format
         actual_dir = custom_dir or config.download_dir
+        browser = cookies_from_browser if cookies_from_browser is not None else config.cookies_from_browser
         
         if index is None or index <= 0:
             index = self.get_next_index(actual_dir)
 
-        task = DownloadTask(url=url, index=index, quality=quality, container_format=container_format, custom_dir=actual_dir)
+        task = DownloadTask(url=url, index=index, quality=quality, container_format=container_format, custom_dir=actual_dir, cookies_from_browser=browser)
         with self._lock:
             self.tasks[task.id] = task
         self.broadcast_update(task)
@@ -178,7 +181,6 @@ class DownloadManager:
 
     def get_all_tasks(self) -> List[Dict[str, Any]]:
         with self._lock:
-            # Sort by sequence index (or created_at)
             return [t.to_dict() for t in sorted(self.tasks.values(), key=lambda x: (x.index, x.created_at))]
 
     def cancel_task(self, task_id: str) -> bool:
@@ -233,7 +235,6 @@ class DownloadManager:
                 with self._lock:
                     queued_tasks = [t for t in self.tasks.values() if t.status == "queued"]
                 
-                # Sort by index to download sequentially in order
                 queued_tasks.sort(key=lambda t: (t.index, t.created_at))
 
                 for task in queued_tasks[:slots_available]:
@@ -267,7 +268,6 @@ class DownloadManager:
             output_dir = Path(task.download_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Format filename with sequence number prefix: e.g. 001. VideoTitle [id].ext
             prefix = f"{task.index:03d}. "
             outtmpl = str(output_dir / f"{prefix}%(title).150B [%(id)s].%(ext)s")
 
@@ -294,7 +294,6 @@ class DownloadManager:
                         task.percent = min(100.0, (downloaded / total) * 100.0)
                     elif d.get("_percent_str"):
                         try:
-                            # clean ansi color codes
                             clean_p = re.sub(r'\x1b\[[0-9;]*m', '', d["_percent_str"]).replace("%", "").strip()
                             task.percent = float(clean_p)
                         except Exception:
@@ -326,26 +325,37 @@ class DownloadManager:
                 'outtmpl': outtmpl,
                 'progress_hooks': [progress_hook],
                 'ffmpeg_location': config.ffmpeg_location,
-                'noplaylist': True,  # Individual task mode; playlist is expanded beforehand
+                'noplaylist': True,
                 'quiet': True,
                 'no_warnings': True,
                 'ignoreerrors': False,
                 'retries': 5,
                 'socket_timeout': 30,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'web']
+                    }
+                }
             }
 
-            if config.proxy:
-                ydl_opts['proxy'] = config.proxy
-
-            if config.cookies_file and os.path.exists(config.cookies_file):
+            # Cookie Authentication Strategy
+            browser_choice = task.cookies_from_browser or config.cookies_from_browser
+            default_cookies_path = Path(__file__).resolve().parent.parent / "cookies.txt"
+            
+            if browser_choice == "cookies_txt" and default_cookies_path.exists():
+                ydl_opts['cookiefile'] = str(default_cookies_path)
+            elif browser_choice and browser_choice != "cookies_txt":
+                ydl_opts['cookiesfrombrowser'] = (browser_choice,)
+            elif config.cookies_file and os.path.exists(config.cookies_file):
                 ydl_opts['cookiefile'] = config.cookies_file
+            elif default_cookies_path.exists():
+                ydl_opts['cookiefile'] = str(default_cookies_path)
 
             if postprocessors:
                 ydl_opts['postprocessors'] = postprocessors
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 task._ydl_instance = ydl
-                # First extract info
                 info = ydl.extract_info(task.url, download=False)
                 if not info:
                     raise Exception("无法解析视频信息")
@@ -358,20 +368,16 @@ class DownloadManager:
                 task.status = "downloading"
                 self.broadcast_update(task)
 
-                # Now download
                 ydl.download([task.url])
 
-                # Locate finished file
                 expected_filename = ydl.prepare_filename(info)
                 if is_audio_only:
                     target_ext = 'mp3' if task.format == 'mp3' else 'm4a'
                     expected_filename = str(Path(expected_filename).with_suffix(f".{target_ext}"))
                 
-                # Verify file existence or fallback search in download dir
                 if os.path.exists(expected_filename):
                     task.file_path = expected_filename
                 else:
-                    # Look for file matching video id or sequence prefix
                     vid_id = info.get("id")
                     if vid_id:
                         for p in output_dir.glob(f"*{vid_id}*"):
@@ -403,7 +409,7 @@ class DownloadManager:
                 task.error_message = str(e)
             self.broadcast_update(task)
 
-    def parse_urls(self, urls: List[str], start_index: Optional[int] = None) -> List[Dict[str, Any]]:
+    def parse_urls(self, urls: List[str], start_index: Optional[int] = None, cookies_from_browser: Optional[str] = None) -> List[Dict[str, Any]]:
         """Extract quick metadata from URLs, recording sequential index"""
         results = []
         ydl_opts: Dict[str, Any] = {
@@ -413,11 +419,24 @@ class DownloadManager:
             'no_warnings': True,
             'ffmpeg_location': config.ffmpeg_location,
             'socket_timeout': 15,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web']
+                }
+            }
         }
-        if config.proxy:
-            ydl_opts['proxy'] = config.proxy
-        if config.cookies_file and os.path.exists(config.cookies_file):
+        
+        browser_choice = cookies_from_browser or config.cookies_from_browser
+        default_cookies_path = Path(__file__).resolve().parent.parent / "cookies.txt"
+        
+        if browser_choice == "cookies_txt" and default_cookies_path.exists():
+            ydl_opts['cookiefile'] = str(default_cookies_path)
+        elif browser_choice and browser_choice != "cookies_txt":
+            ydl_opts['cookiesfrombrowser'] = (browser_choice,)
+        elif config.cookies_file and os.path.exists(config.cookies_file):
             ydl_opts['cookiefile'] = config.cookies_file
+        elif default_cookies_path.exists():
+            ydl_opts['cookiefile'] = str(default_cookies_path)
 
         current_idx = start_index if (start_index and start_index > 0) else self.get_next_index()
 
@@ -431,7 +450,6 @@ class DownloadManager:
                     if not info:
                         continue
                     
-                    # If it's a playlist or multiple entries
                     if "entries" in info and info["entries"]:
                         entries = list(info["entries"])
                         for entry in entries:

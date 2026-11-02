@@ -2,9 +2,8 @@ import os
 import re
 import sys
 import subprocess
-import urllib.request
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Optional
 
 def format_bytes(size: Optional[float]) -> str:
     if size is None or size <= 0:
@@ -49,29 +48,6 @@ def open_in_explorer(target_path: str):
             return True
         except Exception:
             return False
-
-def test_proxy_connection(proxy_url: str) -> Tuple[bool, str]:
-    """Test whether the proxy can reach YouTube or Google"""
-    if not proxy_url:
-        target = "https://www.youtube.com"
-        try:
-            req = urllib.request.Request(target, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                if resp.status < 400:
-                    return True, "直连连接成功"
-        except Exception as e:
-            return False, f"直连失败: {str(e)}"
-    else:
-        try:
-            proxy_handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
-            opener = urllib.request.build_opener(proxy_handler)
-            req = urllib.request.Request("https://www.youtube.com", headers={"User-Agent": "Mozilla/5.0"})
-            with opener.open(req, timeout=8) as resp:
-                if resp.status < 400:
-                    return True, "代理连接 YouTube 成功"
-        except Exception as e:
-            return False, f"代理测试失败: {str(e)}"
-    return False, "连接超时或无响应"
 
 def clean_youtube_url(url: str) -> str:
     return url.strip()
