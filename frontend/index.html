@@ -66,6 +66,16 @@
             接续序号: <strong id="nextIndexBadge">#001</strong>
           </span>
 
+          <!-- YouTube Auth Button -->
+          <button 
+            id="authStatusBtn"
+            type="button"
+            title="YouTube 授权管理：登录一次即可彻底免除机器人拦截，无需关闭现有浏览器" 
+            class="uiverse-ghost-btn h-8 px-2.5 text-xs flex items-center gap-1.5">
+            <span id="authIndicator" class="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span id="authStatusText">YouTube 未授权</span>
+          </button>
+
           <!-- Open Folder Button -->
           <button 
             id="openFolderBtn"
@@ -183,16 +193,18 @@
             </div>
 
             <div>
-              <label class="block font-medium text-textDim mb-1 text-[11px]">防人机验证凭证</label>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block font-medium text-textDim text-[11px]">防人机验证凭证</label>
+                <a href="javascript:void(0)" id="quickAuthLink" class="text-[10px] text-blue-400 hover:underline">一键授权登录</a>
+              </div>
               <select 
                 id="cookiesBrowserSelect"
                 class="uiverse-input w-full px-2.5 py-1.5 text-xs cursor-pointer">
-                <option value="" selected>不使用凭证</option>
-                <option value="edge">Microsoft Edge 浏览器</option>
-                <option value="chrome">Google Chrome 浏览器</option>
-                <option value="firefox">Mozilla Firefox 浏览器</option>
-                <option value="brave">Brave 浏览器</option>
-                <option value="cookies_txt">根目录 cookies.txt 文件</option>
+                <option value="cookies_txt" selected>专属独立凭据 (免锁/免人机)</option>
+                <option value="">不使用凭证 (依赖IP信誉)</option>
+                <option value="edge">读取 Microsoft Edge</option>
+                <option value="chrome">读取 Google Chrome (需关浏览器)</option>
+                <option value="firefox">读取 Mozilla Firefox</option>
               </select>
             </div>
 
@@ -206,6 +218,41 @@
                   class="w-3.5 h-3.5 rounded border-borderLight text-blue-600 focus:ring-blue-500 bg-subtle">
                 <span>展开为独立任务</span>
               </label>
+            </div>
+          </div>
+
+          <!-- Download Destination Directory Bar -->
+          <div class="mt-3.5 pt-3.5 border-t border-borderLight flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-textDim text-[11px] shrink-0 font-medium">保存目录:</span>
+              <div class="flex items-center gap-1.5 min-w-0 bg-subtle px-2.5 py-1 rounded-lg border border-borderLight group" title="当前视频保存位置">
+                <svg class="w-3.5 h-3.5 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span id="currentDownloadDirDisplay" class="font-mono text-textMain text-[11px] truncate max-w-[260px] sm:max-w-md">
+                  C:\Users\Admin\Downloads
+                </span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button 
+                id="changeDirBtn"
+                type="button"
+                title="调起系统文件夹选择器或自定义保存路径" 
+                class="uiverse-ghost-btn text-xs h-7 px-2.5 text-blue-400 hover:text-blue-300">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                <span>更换目录</span>
+              </button>
+              <button 
+                id="resetDirBtn"
+                type="button"
+                title="恢复为系统默认 Downloads 文件夹" 
+                class="uiverse-ghost-btn text-xs h-7 px-2 text-textGhost hover:text-textMain">
+                <span>恢复默认</span>
+              </button>
             </div>
           </div>
 
@@ -343,9 +390,122 @@
       <span id="toastMsg">通知信息</span>
     </div>
 
+    <!-- YouTube One-Click Auth Modal -->
+    <div id="authModal" style="display: none;" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+      <div class="uiverse-glass-card max-w-md w-full p-6 space-y-4 shadow-2xl border border-blue-500/30">
+        <div class="flex items-center justify-between pb-3 border-b border-borderLight">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-textMain">YouTube 专属免锁登录授权</span>
+          </div>
+          <button id="closeAuthModalBtn" class="uiverse-ghost-btn w-6 h-6 p-0 text-textGhost hover:text-textMain">✕</button>
+        </div>
+
+        <p class="text-xs text-textDim leading-relaxed">
+          通过系统调起独立的专用登录小窗口（<strong>独立目录隔离，绝不影响您目前正在使用的 Chrome，互不干扰、无需关闭现有网页</strong>）。
+        </p>
+
+        <div class="space-y-3 pt-1">
+          <!-- Step 1 -->
+          <div class="p-3 rounded-lg bg-surface/50 border border-borderLight space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-textMain">第 1 步：调起专属登录窗口</span>
+            </div>
+            <p class="text-[11px] text-textGhost">
+              点击下方按钮，系统将弹出官方 YouTube 登录应用窗口。在其中输入您的 Google 账号登录。
+            </p>
+            <button 
+              id="openLoginWindowBtn" 
+              type="button" 
+              class="uiverse-pulse-btn w-full text-xs h-8">
+              <span>① 调起独立登录窗口</span>
+            </button>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="p-3 rounded-lg bg-surface/50 border border-borderLight space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-textMain">第 2 步：完成并保存凭证</span>
+            </div>
+            <p class="text-[11px] text-textGhost">
+              当您在弹出的窗口中登录成功进入 YouTube 后，<strong>请先关闭该登录小窗口</strong>，然后点击下方保存。
+            </p>
+            <button 
+              id="saveCookiesBtn" 
+              type="button" 
+              class="uiverse-ghost-btn w-full text-xs h-8 border-blue-500/40 text-blue-400 hover:bg-blue-500/10 font-semibold">
+              <span>② 已关闭登录窗口，提取并保存凭证</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-2 flex items-center justify-between text-[11px] border-t border-borderLight">
+          <span id="authModalDetailText" class="text-textGhost">状态: 检查中...</span>
+          <button id="clearAuthBtn" class="text-rose-400 hover:underline">清除已有凭据</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Directory Modal -->
+    <div id="dirModal" style="display: none;" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+      <div class="uiverse-glass-card max-w-md w-full p-6 space-y-4 shadow-2xl border border-blue-500/30">
+        <div class="flex items-center justify-between pb-3 border-b border-borderLight">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-textMain">自定义视频保存目录</span>
+          </div>
+          <button id="closeDirModalBtn" class="uiverse-ghost-btn w-6 h-6 p-0 text-textGhost hover:text-textMain">✕</button>
+        </div>
+
+        <p class="text-xs text-textDim leading-relaxed">
+          您可以选择将视频下载到系统任意磁盘位置（如 D 盘、外部移动硬盘或自定义影音文件夹）。
+        </p>
+
+        <div class="space-y-3.5 pt-1">
+          <!-- Option A: Native Dialog Picker -->
+          <div class="p-3.5 rounded-lg bg-surface/50 border border-borderLight space-y-2">
+            <span class="text-xs font-semibold text-textMain">方式一：调起系统文件夹浏览</span>
+            <p class="text-[11px] text-textGhost">
+              点击下方按钮，将在系统桌面上调起原生的文件管理器对话框，直接点选文件夹。
+            </p>
+            <button 
+              id="dialogSelectDirBtn" 
+              type="button" 
+              class="uiverse-pulse-btn w-full text-xs h-8 flex items-center justify-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              <span>调起系统窗口点选目录</span>
+            </button>
+          </div>
+
+          <!-- Option B: Manual Path Input -->
+          <div class="p-3.5 rounded-lg bg-surface/50 border border-borderLight space-y-2">
+            <span class="text-xs font-semibold text-textMain">方式二：直接输入或粘贴磁盘路径</span>
+            <div class="flex gap-2">
+              <input 
+                id="customDirPathInput"
+                type="text" 
+                placeholder="例如: D:\Videos 或 E:\Downloads" 
+                class="uiverse-input flex-1 px-2.5 py-1.5 text-xs font-mono">
+              <button 
+                id="saveCustomDirBtn" 
+                type="button" 
+                class="uiverse-ghost-btn px-3 text-xs text-blue-400 hover:text-blue-300 shrink-0 font-medium border-blue-500/30">
+                <span>保存</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-2 flex items-center justify-between text-[11px] border-t border-borderLight">
+          <span id="defaultDirHintText" class="text-textGhost truncate max-w-[240px]">默认: C:\Users\...\Downloads</span>
+          <button id="modalResetDirBtn" class="text-blue-400 hover:underline">恢复默认</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- App Script -->
-  <script src="/static/js/app.js?v=20261102_01"></script>
+  <script src="/static/js/app.js?v=20261102_03"></script>
 </body>
 </html>

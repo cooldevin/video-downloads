@@ -10,9 +10,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from backend.config import config, save_config, AppConfig, BASE_DIR
+from backend.config import config, save_config, AppConfig, BASE_DIR, DEFAULT_DOWNLOAD_DIR
 from backend.downloader import download_manager, scan_downloaded_files
-from backend.utils import open_in_explorer, format_bytes
+from backend.utils import open_in_explorer, format_bytes, prompt_directory_dialog
+from backend import auth
 
 app = FastAPI(title="YouTube Downloader API")
 
@@ -265,7 +266,69 @@ def get_config():
             "ffmpeg_ready": os.path.exists(config.ffmpeg_location),
             "download_dir_exists": os.path.exists(config.download_dir),
             "next_index": download_manager.get_next_index(),
+            "default_system_downloads": str(DEFAULT_DOWNLOAD_DIR),
         }
+    }
+
+
+class SetDirRequest(BaseModel):
+    download_dir: str
+
+
+@app.post("/api/config/select-dir")
+def select_download_directory():
+    """Prompt native system directory dialog and update config if chosen."""
+    chosen = prompt_directory_dialog(config.download_dir)
+    if chosen:
+        chosen_clean = str(Path(chosen).resolve())
+        Path(chosen_clean).mkdir(parents=True, exist_ok=True)
+        config.download_dir = chosen_clean
+        save_config(config)
+        return {
+            "success": True,
+            "download_dir": chosen_clean,
+            "next_index": download_manager.get_next_index(),
+            "message": f"已将视频保存目录切换为: {chosen_clean}"
+        }
+    return {
+        "success": False,
+        "message": "已取消选择目录"
+    }
+
+
+@app.post("/api/config/set-dir")
+def set_download_directory(req: SetDirRequest):
+    """Manually set and persist the download directory."""
+    raw = req.download_dir.strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="保存目录路径不能为空")
+    try:
+        p = Path(raw).resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        config.download_dir = str(p)
+        save_config(config)
+        return {
+            "success": True,
+            "download_dir": str(p),
+            "next_index": download_manager.get_next_index(),
+            "message": f"已更新视频保存目录为: {str(p)}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"无法设置该路径: {str(e)}")
+
+
+@app.post("/api/config/reset-dir")
+def reset_download_directory():
+    """Reset download directory to system default Downloads folder."""
+    p = Path(DEFAULT_DOWNLOAD_DIR).resolve()
+    p.mkdir(parents=True, exist_ok=True)
+    config.download_dir = str(p)
+    save_config(config)
+    return {
+        "success": True,
+        "download_dir": str(p),
+        "next_index": download_manager.get_next_index(),
+        "message": f"已重置为系统默认下载目录: {str(p)}"
     }
 
 
@@ -326,6 +389,33 @@ async def event_stream(request: Request):
             "X-Accel-Buffering": "no"
         }
     )
+
+
+# --- One-Click Isolated YouTube Authentication Endpoints ---
+@app.get("/api/auth/status")
+def get_auth_status():
+    return auth.get_auth_status()
+
+
+@app.post("/api/auth/open-login")
+def open_login_window():
+    res = auth.open_login_window()
+    if not res.get("success"):
+        raise HTTPException(status_code=500, detail=res.get("message"))
+    return res
+
+
+@app.post("/api/auth/save-cookies")
+def save_auth_cookies():
+    res = auth.extract_and_save_cookies()
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("message"))
+    return res
+
+
+@app.post("/api/auth/clear")
+def clear_auth_cookies():
+    return auth.clear_auth()
 
 
 # Mount static frontend

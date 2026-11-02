@@ -51,3 +51,19 @@ def open_in_explorer(target_path: str):
 
 def clean_youtube_url(url: str) -> str:
     return url.strip()
+
+def prompt_directory_dialog(initial_dir: str = "") -> Optional[str]:
+    """Launch native system folder dialog to pick a directory."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        folder = filedialog.askdirectory(initialdir=initial_dir or None, title="选择视频下载保存目录")
+        root.destroy()
+        return folder if folder else None
+    except Exception as e:
+        print(f"[Dialog] Folder picker error: {e}")
+        return None
+

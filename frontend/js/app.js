@@ -49,6 +49,26 @@
     countCompleted: document.getElementById('countCompleted'),
     countFailed: document.getElementById('countFailed'),
     countLibrary: document.getElementById('countLibrary'),
+    authStatusBtn: document.getElementById('authStatusBtn'),
+    authIndicator: document.getElementById('authIndicator'),
+    authStatusText: document.getElementById('authStatusText'),
+    quickAuthLink: document.getElementById('quickAuthLink'),
+    authModal: document.getElementById('authModal'),
+    closeAuthModalBtn: document.getElementById('closeAuthModalBtn'),
+    openLoginWindowBtn: document.getElementById('openLoginWindowBtn'),
+    saveCookiesBtn: document.getElementById('saveCookiesBtn'),
+    clearAuthBtn: document.getElementById('clearAuthBtn'),
+    authModalDetailText: document.getElementById('authModalDetailText'),
+    currentDownloadDirDisplay: document.getElementById('currentDownloadDirDisplay'),
+    changeDirBtn: document.getElementById('changeDirBtn'),
+    resetDirBtn: document.getElementById('resetDirBtn'),
+    dirModal: document.getElementById('dirModal'),
+    closeDirModalBtn: document.getElementById('closeDirModalBtn'),
+    dialogSelectDirBtn: document.getElementById('dialogSelectDirBtn'),
+    customDirPathInput: document.getElementById('customDirPathInput'),
+    saveCustomDirBtn: document.getElementById('saveCustomDirBtn'),
+    defaultDirHintText: document.getElementById('defaultDirHintText'),
+    modalResetDirBtn: document.getElementById('modalResetDirBtn'),
   };
 
   // --- Theme Management ---
@@ -114,6 +134,108 @@
   }
 
   // --- API Requests ---
+  // --- Auth Management ---
+  async function fetchAuthStatus() {
+    try {
+      const res = await fetch('/api/auth/status');
+      if (res.ok) {
+        const data = await res.json();
+        updateAuthUI(data);
+      }
+    } catch (e) {
+      console.warn('fetchAuthStatus failed:', e);
+    }
+  }
+
+  function updateAuthUI(data) {
+    if (data.authenticated) {
+      if (el.authIndicator) {
+        el.authIndicator.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400';
+      }
+      if (el.authStatusText) {
+        el.authStatusText.textContent = '已授权 (免人机)';
+      }
+      if (el.authModalDetailText) {
+        el.authModalDetailText.textContent = `已生效: ${data.size} (更新于 ${data.updated_at})`;
+      }
+      if (el.cookiesBrowserSelect && !localStorage.getItem('cookies_browser')) {
+        el.cookiesBrowserSelect.value = 'cookies_txt';
+      }
+    } else {
+      if (el.authIndicator) {
+        el.authIndicator.className = 'w-2 h-2 rounded-full bg-amber-400';
+      }
+      if (el.authStatusText) {
+        el.authStatusText.textContent = '未授权 (点击登录)';
+      }
+      if (el.authModalDetailText) {
+        el.authModalDetailText.textContent = '状态: 尚未保存专属免锁凭据';
+      }
+    }
+  }
+
+  async function openLoginWindow() {
+    try {
+      if (el.openLoginWindowBtn) el.openLoginWindowBtn.disabled = true;
+      const res = await fetch('/api/auth/open-login', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('已调起独立登录窗口，请在其中登录后关闭窗口', 'info');
+      } else {
+        showToast(data.detail || '打开窗口失败', 'danger');
+      }
+    } catch (e) {
+      showToast('请求失败: ' + e.message, 'danger');
+    } finally {
+      if (el.openLoginWindowBtn) el.openLoginWindowBtn.disabled = false;
+    }
+  }
+
+  async function saveCookies() {
+    try {
+      if (el.saveCookiesBtn) el.saveCookiesBtn.disabled = true;
+      const res = await fetch('/api/auth/save-cookies', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || '凭据提取成功！', 'success');
+        await fetchAuthStatus();
+        if (el.cookiesBrowserSelect) el.cookiesBrowserSelect.value = 'cookies_txt';
+        closeAuthModal();
+      } else {
+        showToast(data.detail || '提取失败，请确保已登录并关闭了小窗口', 'warning');
+      }
+    } catch (e) {
+      showToast('操作异常: ' + e.message, 'danger');
+    } finally {
+      if (el.saveCookiesBtn) el.saveCookiesBtn.disabled = false;
+    }
+  }
+
+  async function clearAuth() {
+    if (!confirm('确定要清除已保存的 YouTube 登录凭证吗？')) return;
+    try {
+      const res = await fetch('/api/auth/clear', { method: 'POST' });
+      const data = await res.json();
+      showToast(data.message || '已清除', 'info');
+      await fetchAuthStatus();
+    } catch (e) {
+      showToast('清除失败: ' + e.message, 'danger');
+    }
+  }
+
+  function showAuthModal() {
+    if (el.authModal) {
+      el.authModal.style.display = 'flex';
+      fetchAuthStatus();
+    }
+  }
+
+  function closeAuthModal() {
+    if (el.authModal) {
+      el.authModal.style.display = 'none';
+    }
+  }
+
   async function fetchTasks() {
     try {
       const res = await fetch('/api/tasks');
@@ -135,6 +257,15 @@
       if (res.ok) {
         const data = await res.json();
         state.downloadDir = data.config.download_dir;
+        if (el.currentDownloadDirDisplay) {
+          el.currentDownloadDirDisplay.textContent = state.downloadDir;
+        }
+        if (el.customDirPathInput) {
+          el.customDirPathInput.value = state.downloadDir;
+        }
+        if (el.defaultDirHintText && data.system && data.system.default_system_downloads) {
+          el.defaultDirHintText.textContent = `系统默认: ${data.system.default_system_downloads}`;
+        }
         if (data.system && data.system.next_index) {
           state.nextIndex = data.system.next_index;
           updateNextIndexUI();
@@ -145,6 +276,90 @@
       }
     } catch (e) {
       console.warn('fetchConfig failed:', e);
+    }
+  }
+
+  // --- Download Directory Management ---
+  function showDirModal() {
+    if (el.dirModal) {
+      el.dirModal.style.display = 'flex';
+      if (el.customDirPathInput) el.customDirPathInput.value = state.downloadDir;
+    }
+  }
+
+  function closeDirModal() {
+    if (el.dirModal) {
+      el.dirModal.style.display = 'none';
+    }
+  }
+
+  async function dialogSelectDir() {
+    try {
+      if (el.dialogSelectDirBtn) el.dialogSelectDirBtn.disabled = true;
+      showToast('正在调起系统文件夹浏览窗口...', 'info');
+      const res = await fetch('/api/config/select-dir', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message || '目录已更改', 'success');
+        await fetchConfig();
+        await fetchLibrary();
+        closeDirModal();
+      } else {
+        if (data.message && data.message !== '已取消选择目录') {
+          showToast(data.message, 'warning');
+        }
+      }
+    } catch (e) {
+      showToast('调起文件夹选择失败: ' + e.message, 'danger');
+    } finally {
+      if (el.dialogSelectDirBtn) el.dialogSelectDirBtn.disabled = false;
+    }
+  }
+
+  async function saveCustomDir() {
+    if (!el.customDirPathInput) return;
+    const path = el.customDirPathInput.value.trim();
+    if (!path) {
+      showToast('请输入有效的目录路径', 'warning');
+      return;
+    }
+    try {
+      if (el.saveCustomDirBtn) el.saveCustomDirBtn.disabled = true;
+      const res = await fetch('/api/config/set-dir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ download_dir: path })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message || '目录设置成功', 'success');
+        await fetchConfig();
+        await fetchLibrary();
+        closeDirModal();
+      } else {
+        showToast(data.detail || '设置目录失败', 'danger');
+      }
+    } catch (e) {
+      showToast('保存异常: ' + e.message, 'danger');
+    } finally {
+      if (el.saveCustomDirBtn) el.saveCustomDirBtn.disabled = false;
+    }
+  }
+
+  async function resetDefaultDir() {
+    try {
+      const res = await fetch('/api/config/reset-dir', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message || '已恢复系统默认下载目录', 'success');
+        await fetchConfig();
+        await fetchLibrary();
+        closeDirModal();
+      } else {
+        showToast(data.detail || '恢复默认失败', 'danger');
+      }
+    } catch (e) {
+      showToast('重置异常: ' + e.message, 'danger');
     }
   }
 
@@ -749,6 +964,30 @@
         setActiveFilter(f);
       });
     });
+
+    // Auth events
+    if (el.authStatusBtn) el.authStatusBtn.addEventListener('click', showAuthModal);
+    if (el.quickAuthLink) el.quickAuthLink.addEventListener('click', showAuthModal);
+    if (el.closeAuthModalBtn) el.closeAuthModalBtn.addEventListener('click', closeAuthModal);
+    if (el.openLoginWindowBtn) el.openLoginWindowBtn.addEventListener('click', openLoginWindow);
+    if (el.saveCookiesBtn) el.saveCookiesBtn.addEventListener('click', saveCookies);
+    if (el.clearAuthBtn) el.clearAuthBtn.addEventListener('click', clearAuth);
+
+    // Directory events
+    if (el.changeDirBtn) el.changeDirBtn.addEventListener('click', showDirModal);
+    if (el.closeDirModalBtn) el.closeDirModalBtn.addEventListener('click', closeDirModal);
+    if (el.resetDirBtn) el.resetDirBtn.addEventListener('click', resetDefaultDir);
+    if (el.modalResetDirBtn) el.modalResetDirBtn.addEventListener('click', resetDefaultDir);
+    if (el.dialogSelectDirBtn) el.dialogSelectDirBtn.addEventListener('click', dialogSelectDir);
+    if (el.saveCustomDirBtn) el.saveCustomDirBtn.addEventListener('click', saveCustomDir);
+    if (el.customDirPathInput) {
+      el.customDirPathInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          saveCustomDir();
+        }
+      });
+    }
   }
 
   // --- Initialize ---
@@ -756,6 +995,7 @@
     initTheme();
     initBrowserCookiePref();
     setupEvents();
+    fetchAuthStatus();
     fetchTasks();
     fetchConfig();
     fetchLibrary();
